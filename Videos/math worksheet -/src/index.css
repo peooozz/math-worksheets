@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-comic;
+    overscroll-behavior: none;
+  }
+}
+
+/* Prevent scrolling on touch devices when tracing */
+.no-scroll {
+  overflow: hidden;
+  touch-action: none;
+}
+
+@media print {
+  header, footer, button, .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  main {
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    max-width: none;
+  }
+  .bg-slate-50 {
+    background: white;
+  }
+}

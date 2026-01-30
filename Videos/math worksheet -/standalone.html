@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kids Math Fun (Standalone)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "framer-motion": "https://esm.sh/framer-motion@10.16.4",
+            "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.2"
+        }
+    }
+    </script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive;
+            overscroll-behavior: none;
+        }
+        .no-scroll {
+            overflow: hidden;
+            touch-action: none;
+        }
+        /* Custom Colors matching Tailwind config */
+        .bg-pastel-blue { background-color: #AEC6CF; }
+        .text-pastel-blue { color: #AEC6CF; }
+        .bg-pastel-green { background-color: #77DD77; }
+        .text-pastel-green { color: #77DD77; }
+        .bg-pastel-pink { background-color: #FFB7B2; }
+        .text-pastel-pink { color: #FFB7B2; }
+        .bg-pastel-orange { background-color: #FFB347; }
+        .text-pastel-orange { color: #FFB347; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { motion, AnimatePresence } from 'framer-motion';
+        import confetti from 'canvas-confetti';
+
+        // --- ICONS (Inlined for reliability) ---
+        const Icon = ({ children, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>{children}</svg>
+        );
+        const ArrowRight = (props) => <Icon {...props}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></Icon>;
+        const Check = (props) => <Icon {...props}><polyline points="20 6 9 17 4 12"/></Icon>;
+        const RefreshCw = (props) => <Icon {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></Icon>;
+        const RotateCcw = (props) => <Icon {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Icon>;
+        const Star = (props) => <Icon {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Icon>;
+        const Plus = (props) => <Icon {...props}><path d="M5 12h14"/><path d="M12 5v14"/></Icon>;
+        const Minus = (props) => <Icon {...props}><path d="M5 12h14"/></Icon>;
+        const Calculator = (props) => <Icon {...props}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>;
+
+        // --- SOUND UTILS ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioContext();
+
+        const playSound = (type) => {
+            if (ctx.state === 'suspended') ctx.resume();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            const now = ctx.currentTime;
+
+            switch (type) {
+                case 'pop':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                    gain.gain.setValueAtTime(0.5, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                    break;
+                case 'success':
+                    playNote(523.25, now, 0.1);
+                    playNote(659.25, now + 0.1, 0.1);
+                    playNote(783.99, now + 0.2, 0.2);
+                    playNote(1046.50, now + 0.3, 0.4);
+                    break;
+                case 'correct':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                    break;
+                case 'error':
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                    break;
+                case 'click':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                    break;
+            }
+        };
+
+        const playNote = (freq, time, duration) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            gain.gain.setValueAtTime(0.2, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+            osc.start(time);
+            osc.stop(time + duration);
+        };
+
+        // --- NUMBERS MODULE ---
+        const NUMBER_PATHS = {
+            0: ["M 100,20 A 40,40 0 1,1 100,180 A 40,40 0 1,1 100,20"],
+            1: ["M 80,40 L 100,20 L 100,180"],
+            2: ["M 60,60 C 60,20 140,20 140,60 C 140,100 60,180 60,180 L 150,180"],
+            3: ["M 60,40 L 140,40 L 100,80 M 100,80 C 150,80 150,160 100,160 C 60,160 60,120 60,120"],
+            4: ["M 120,180 L 120,20 L 40,120 L 140,120"],
+            5: ["M 130,20 L 70,20 L 70,80 C 70,80 140,80 140,140 C 140,180 60,180 60,140"],
+            6: ["M 120,20 C 60,60 60,180 100,180 C 140,180 140,120 100,120 C 60,120 65,110 120,20"],
+            7: ["M 40,20 L 160,20 L 80,180"],
+            8: ["M 100,100 C 140,100 140,20 100,20 C 60,20 60,100 100,100 C 140,100 140,180 100,180 C 60,180 60,100 100,100"],
+            9: ["M 80,180 C 140,140 140,20 100,20 C 60,20 60,100 100,100 C 140,100 135,110 80,180"],
+            10: ["M 60,50 L 80,30 L 80,170", "M 140,30 A 30,30 0 1,1 140,170 A 30,30 0 1,1 140,30"]
+        };
+        const NUMBER_NAMES = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+
+        const NumbersModule = () => {
+            const [currentNumber, setCurrentNumber] = useState(0);
+            const [isCompleted, setIsCompleted] = useState(false);
+            const [userPaths, setUserPaths] = useState([]);
+            const [currentPath, setCurrentPath] = useState([]);
+            const [targetPoints, setTargetPoints] = useState([]);
+            const pathRefs = useRef([]);
+            const svgRef = useRef(null);
+
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    const newTargetPoints = [];
+                    pathRefs.current.forEach((path) => {
+                        if (!path) return;
+                        const length = path.getTotalLength();
+                        const points = [];
+                        for (let i = 0; i <= length; i += 10) {
+                            const p = path.getPointAtLength(i);
+                            points.push({ x: p.x, y: p.y, covered: false });
+                        }
+                        newTargetPoints.push(points);
+                    });
+                    setTargetPoints(newTargetPoints);
+                }, 100);
+                return () => clearTimeout(timer);
+            }, [currentNumber]);
+
+            useEffect(() => {
+                setUserPaths([]);
+                setCurrentPath([]);
+                setIsCompleted(false);
+                pathRefs.current = [];
+                playSound('pop');
+            }, [currentNumber]);
+
+            const handleStart = (e) => {
+                if (isCompleted) return;
+                document.body.classList.add('no-scroll');
+                const point = getPoint(e);
+                setCurrentPath([point]);
+                playSound('click');
+            };
+
+            const handleMove = (e) => {
+                if (isCompleted || currentPath.length === 0) return;
+                const point = getPoint(e);
+                setCurrentPath((prev) => [...prev, point]);
+                checkCoverage(point);
+            };
+
+            const handleEnd = () => {
+                document.body.classList.remove('no-scroll');
+                if (currentPath.length > 0) {
+                    setUserPaths((prev) => [...prev, { points: currentPath }]);
+                    setCurrentPath([]);
+                }
+            };
+
+            const getPoint = (e) => {
+                const svg = svgRef.current;
+                if (!svg) return { x: 0, y: 0 };
+                let clientX, clientY;
+                if (e.changedTouches) {
+                    clientX = e.changedTouches[0].clientX;
+                    clientY = e.changedTouches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+                const rect = svg.getBoundingClientRect();
+                return {
+                    x: (clientX - rect.left) * (200 / rect.width),
+                    y: (clientY - rect.top) * (200 / rect.height)
+                };
+            };
+
+            const checkCoverage = (userPoint) => {
+                let changed = false;
+                let allCompleted = true;
+                const newTargetPoints = targetPoints.map(subPath => {
+                    const newSubPath = subPath.map(pt => {
+                        if (pt.covered) return pt;
+                        const dist = Math.sqrt(Math.pow(pt.x - userPoint.x, 2) + Math.pow(pt.y - userPoint.y, 2));
+                        if (dist < 20) {
+                            changed = true;
+                            return { ...pt, covered: true };
+                        }
+                        return pt;
+                    });
+                    const coveredCount = newSubPath.filter(p => p.covered).length;
+                    if (coveredCount / newSubPath.length < 0.8) allCompleted = false;
+                    return newSubPath;
+                });
+
+                if (changed) {
+                    setTargetPoints(newTargetPoints);
+                    if (allCompleted && !isCompleted) completeLevel();
+                }
+            };
+
+            const completeLevel = () => {
+                setIsCompleted(true);
+                playSound('success');
+                confetti({
+                    particleCount: 150,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#AEC6CF', '#FFB7B2', '#77DD77', '#FDFD96']
+                });
+            };
+
+            const nextNumber = () => { if (currentNumber < 10) setCurrentNumber(c => c + 1); };
+            const prevNumber = () => { if (currentNumber > 0) setCurrentNumber(c => c - 1); };
+            const reset = () => {
+                setUserPaths([]);
+                setIsCompleted(false);
+                setTargetPoints(prev => prev.map(sub => sub.map(p => ({ ...p, covered: false }))));
+            };
+
+            const pointsToPath = (points) => {
+                if (points.length === 0) return "";
+                return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
+            };
+
+            const currentPaths = NUMBER_PATHS[currentNumber];
+
+            return (
+                <div className="h-full flex flex-col items-center p-2 md:p-4 bg-white overflow-y-auto">
+                    <div className="text-center mb-2 md:mb-4 shrink-0">
+                        <h2 className="text-3xl md:text-4xl font-bold text-pastel-blue mb-1">{NUMBER_NAMES[currentNumber]}</h2>
+                        <div className="flex gap-4 justify-center items-center">
+                            <button onClick={prevNumber} disabled={currentNumber === 0} className="p-2 text-slate-300 hover:text-slate-500 disabled:opacity-0"><ArrowRight className="rotate-180" /></button>
+                            <div className="text-5xl md:text-6xl font-bold text-slate-800 w-20">{currentNumber}</div>
+                            <button onClick={nextNumber} disabled={currentNumber === 10} className="p-2 text-slate-300 hover:text-slate-500 disabled:opacity-0"><ArrowRight /></button>
+                        </div>
+                    </div>
+                    <div className="relative w-full max-w-[300px] aspect-square bg-slate-50 rounded-3xl border-4 border-dashed border-pastel-blue/30 flex items-center justify-center touch-none shadow-inner shrink-0">
+                        <svg ref={svgRef} viewBox="0 0 200 200" className="w-full h-full"
+                             onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
+                             onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onMouseLeave={handleEnd}
+                             style={{ cursor: isCompleted ? 'default' : 'crosshair' }}>
+                            {currentPaths.map((d, i) => (
+                                <g key={i}>
+                                    <path d={d} fill="none" stroke="#e2e8f0" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path ref={el => pathRefs.current[i] = el} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" />
+                                </g>
+                            ))}
+                            {userPaths.map((p, i) => (
+                                <path key={i} d={pointsToPath(p.points)} fill="none" stroke="#77DD77" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+                            ))}
+                            <path d={pointsToPath(currentPath)} fill="none" stroke="#77DD77" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+                        </svg>
+                        {isCompleted && (
+                            <motion.div initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="bg-white/90 p-4 rounded-full shadow-xl"><Check size={60} className="text-green-500" /></div>
+                            </motion.div>
+                        )}
+                    </div>
+                    <div className="w-full max-w-[300px] mt-4 flex gap-4 justify-between shrink-0">
+                        <button onClick={reset} className="p-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"><RefreshCw size={24} /></button>
+                        {isCompleted && (
+                            <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} onClick={nextNumber} className="flex-1 bg-pastel-green text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center justify-center gap-2 hover:brightness-110">
+                                Next Number <ArrowRight size={24} />
+                            </motion.button>
+                        )}
+                    </div>
+                    <div className="w-full max-w-lg mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <h3 className="text-slate-400 font-bold mb-2 text-sm uppercase tracking-wider">Practice Grid</h3>
+                        <div className="grid grid-cols-5 gap-2">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <div key={i} className="aspect-square bg-white rounded-xl border border-slate-200 flex items-center justify-center relative group">
+                                    <span className="text-4xl text-slate-200 font-bold select-none absolute">{currentNumber}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ADDITION MODULE ---
+        const OBJECTS = ['🍎', '⭐', '🧸', '🎈', '🐶', '🚗', '🍪'];
+        const AdditionModule = () => {
+            const [num1, setNum1] = useState(1);
+            const [num2, setNum2] = useState(1);
+            const [objectType, setObjectType] = useState(OBJECTS[0]);
+            const [options, setOptions] = useState([]);
+            const [isCorrect, setIsCorrect] = useState(false);
+            const [score, setScore] = useState(0);
+            const [countedIndices, setCountedIndices] = useState(new Set());
+
+            const generateProblem = () => {
+                const n1 = Math.floor(Math.random() * 6);
+                const n2 = Math.floor(Math.random() * (11 - n1));
+                setNum1(n1); setNum2(n2);
+                setObjectType(OBJECTS[Math.floor(Math.random() * OBJECTS.length)]);
+                setIsCorrect(false);
+                setCountedIndices(new Set());
+                const sum = n1 + n2;
+                const opts = new Set([sum]);
+                while(opts.size < 3) {
+                    let r = Math.floor(Math.random() * 11);
+                    if (r !== sum) opts.add(r);
+                }
+                setOptions(Array.from(opts).sort((a, b) => a - b));
+            };
+
+            useEffect(() => { generateProblem(); }, []);
+
+            const handleAnswer = (ans) => {
+                if (ans === num1 + num2) {
+                    setIsCorrect(true); setScore(s => s + 1); playSound('success');
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#AEC6CF', '#FFB7B2', '#77DD77', '#FDFD96'] });
+                } else { playSound('error'); }
+            };
+
+            const handleObjectTap = (index) => {
+                if (countedIndices.has(index)) return;
+                const newSet = new Set(countedIndices);
+                newSet.add(index);
+                setCountedIndices(newSet);
+                playSound('click');
+            };
+
+            return (
+                <div className="h-full flex flex-col p-2 md:p-4 bg-white items-center overflow-y-auto">
+                    <div className="w-full flex justify-between items-center mb-6 text-slate-500 shrink-0">
+                        <button onClick={generateProblem} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><RotateCcw size={20} /></button>
+                        <div className="flex items-center gap-1 text-pastel-orange bg-orange-50 px-3 py-1 rounded-full border border-orange-100"><Star fill="currentColor" size={20} /><span className="font-bold">{score}</span></div>
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center items-center w-full gap-4 md:gap-8">
+                        <div className="flex items-center justify-center gap-2 md:gap-4 flex-wrap text-5xl md:text-7xl select-none">
+                            <div className="flex gap-2 p-4 bg-pastel-blue/20 rounded-3xl min-w-[100px] justify-center flex-wrap relative">
+                                {Array.from({ length: num1 }).map((_, i) => (
+                                    <motion.div key={`n1-${i}`} initial={{ scale: 0 }} animate={{ scale: countedIndices.has(i) ? 1.2 : 1 }} whileTap={{ scale: 0.8 }} onClick={() => handleObjectTap(i)} className={`cursor-pointer transition-opacity ${countedIndices.has(i) ? 'opacity-100' : 'opacity-90'}`}>
+                                        {objectType}
+                                        {countedIndices.has(i) && <span className="absolute -top-2 right-0 text-sm bg-black/50 text-white px-1 rounded-full">{i + 1}</span>}
+                                    </motion.div>
+                                ))}
+                                {num1 === 0 && <span className="opacity-30 text-4xl">0</span>}
+                                <div className="absolute -bottom-8 text-2xl font-bold text-slate-400">{num1}</div>
+                            </div>
+                            <div className="text-slate-400 font-bold text-4xl">+</div>
+                            <div className="flex gap-2 p-4 bg-pastel-green/20 rounded-3xl min-w-[100px] justify-center flex-wrap relative">
+                                {Array.from({ length: num2 }).map((_, i) => (
+                                    <motion.div key={`n2-${i}`} initial={{ scale: 0 }} animate={{ scale: countedIndices.has(num1 + i) ? 1.2 : 1 }} transition={{ delay: 0.2 + i * 0.1 }} whileTap={{ scale: 0.8 }} onClick={() => handleObjectTap(num1 + i)} className={`cursor-pointer transition-opacity ${countedIndices.has(num1 + i) ? 'opacity-100' : 'opacity-90'}`}>
+                                        {objectType}
+                                        {countedIndices.has(num1 + i) && <span className="absolute -top-2 right-0 text-sm bg-black/50 text-white px-1 rounded-full">{num1 + i + 1}</span>}
+                                    </motion.div>
+                                ))}
+                                {num2 === 0 && <span className="opacity-30 text-4xl">0</span>}
+                                <div className="absolute -bottom-8 text-2xl font-bold text-slate-400">{num2}</div>
+                            </div>
+                        </div>
+                        <div className="text-4xl font-bold text-slate-300 mt-4">=</div>
+                        <div className="flex gap-4 md:gap-8 mt-4 flex-wrap justify-center w-full">
+                            {options.map((opt) => (
+                                <motion.button key={opt} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleAnswer(opt)} className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl text-3xl md:text-4xl font-bold shadow-lg transition-colors ${isCorrect && opt === num1 + num2 ? 'bg-green-400 text-white ring-4 ring-green-200' : 'bg-white text-slate-600 hover:bg-slate-50 ring-2 ring-slate-100'}`} disabled={isCorrect}>{opt}</motion.button>
+                            ))}
+                        </div>
+                        {isCorrect && (
+                            <motion.button initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onClick={generateProblem} className="mt-8 bg-pastel-blue text-white font-bold py-3 px-8 rounded-full shadow-lg flex items-center gap-2 hover:brightness-110">Next Problem <ArrowRight /></motion.button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- SUBTRACTION MODULE ---
+        const SubtractionModule = () => {
+            const [total, setTotal] = useState(1);
+            const [removed, setRemoved] = useState(0);
+            const [objectType, setObjectType] = useState(OBJECTS[0]);
+            const [options, setOptions] = useState([]);
+            const [isCorrect, setIsCorrect] = useState(false);
+            const [score, setScore] = useState(0);
+
+            const generateProblem = () => {
+                const t = Math.floor(Math.random() * 10) + 1;
+                const r = Math.floor(Math.random() * (t + 1));
+                setTotal(t); setRemoved(r);
+                setObjectType(OBJECTS[Math.floor(Math.random() * OBJECTS.length)]);
+                setIsCorrect(false);
+                const ans = t - r;
+                const opts = new Set([ans]);
+                while(opts.size < 3) {
+                    let rand = Math.floor(Math.random() * 11);
+                    if (rand !== ans) opts.add(rand);
+                }
+                setOptions(Array.from(opts).sort((a, b) => a - b));
+            };
+
+            useEffect(() => { generateProblem(); }, []);
+
+            const handleAnswer = (ans) => {
+                if (ans === total - removed) {
+                    setIsCorrect(true); setScore(s => s + 1); playSound('success');
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#AEC6CF', '#FFB7B2', '#77DD77', '#FDFD96'] });
+                } else { playSound('error'); }
+            };
+
+            return (
+                <div className="h-full flex flex-col p-2 md:p-4 bg-white items-center overflow-y-auto">
+                    <div className="w-full flex justify-between items-center mb-6 text-slate-500 shrink-0">
+                        <button onClick={generateProblem} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><RotateCcw size={20} /></button>
+                        <div className="flex items-center gap-1 text-pastel-orange bg-orange-50 px-3 py-1 rounded-full border border-orange-100"><Star fill="currentColor" size={20} /><span className="font-bold">{score}</span></div>
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center items-center w-full gap-4 md:gap-8">
+                        <div className="relative p-6 bg-pastel-pink/10 rounded-3xl min-h-[200px] flex items-center justify-center w-full max-w-md">
+                            <div className="flex flex-wrap gap-4 justify-center">
+                                {Array.from({ length: total }).map((_, i) => (
+                                    <motion.div key={`obj-${i}`} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: i < (total - removed) ? 1 : 0.3, scale: 1 }} className="text-5xl md:text-6xl relative select-none">
+                                        {objectType}
+                                        {i >= (total - removed) && (
+                                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5 + (i - (total-removed)) * 0.2 }} onAnimationStart={() => playSound('pop')} className="absolute inset-0 flex items-center justify-center text-red-500/60 font-bold">✕</motion.div>
+                                        )}
+                                    </motion.div>
+                                ))}
+                            </div>
+                            <div className="absolute top-4 right-4 text-4xl font-bold text-slate-300 opacity-20">{total}</div>
+                        </div>
+                        <div className="text-4xl font-bold text-slate-700 mt-2">{total} - {removed} = <span className="inline-block w-16 border-b-4 border-slate-300 text-center text-pastel-pink">{isCorrect ? total - removed : '?'}</span></div>
+                        <div className="flex gap-4 md:gap-8 mt-4 flex-wrap justify-center w-full">
+                            {options.map((opt) => (
+                                <motion.button key={opt} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleAnswer(opt)} className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl text-3xl md:text-4xl font-bold shadow-lg transition-colors ${isCorrect && opt === total - removed ? 'bg-green-400 text-white ring-4 ring-green-200' : 'bg-white text-slate-600 hover:bg-slate-50 ring-2 ring-slate-100'}`} disabled={isCorrect}>{opt}</motion.button>
+                            ))}
+                        </div>
+                        {isCorrect && (
+                            <motion.button initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onClick={generateProblem} className="mt-8 bg-pastel-blue text-white font-bold py-3 px-8 rounded-full shadow-lg flex items-center gap-2 hover:brightness-110">Next Problem <ArrowRight /></motion.button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- LAYOUT ---
+        const Layout = ({ currentModule, onModuleChange, children }) => {
+            const modules = [
+                { id: 'numbers', label: 'Numbers', icon: Calculator, color: 'bg-pastel-blue' },
+                { id: 'addition', label: 'Addition', icon: Plus, color: 'bg-pastel-green' },
+                { id: 'subtraction', label: 'Subtraction', icon: Minus, color: 'bg-pastel-pink' },
+            ];
+            return (
+                <div className="min-h-screen bg-slate-50 flex flex-col font-comic select-none">
+                    <header className="p-4 bg-white shadow-md z-10 sticky top-0">
+                        <div className="max-w-4xl mx-auto flex items-center justify-between">
+                            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2"><span className="text-3xl">✏️</span> <span className="hidden sm:inline">Math Fun</span></h1>
+                            <nav className="flex gap-2">
+                                {modules.map((mod) => {
+                                    const Icon = mod.icon;
+                                    return (
+                                        <button key={mod.id} onClick={() => onModuleChange(mod.id)} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-all transform active:scale-95 ${currentModule === mod.id ? `${mod.color} text-white shadow-lg scale-105 font-bold` : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                            <Icon size={20} /> <span className="hidden sm:inline">{mod.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+                        </div>
+                    </header>
+                    <main className="flex-1 p-4 max-w-4xl mx-auto w-full flex flex-col">
+                        <div className="flex-1 bg-white rounded-3xl shadow-xl overflow-hidden relative min-h-[60vh]">{children}</div>
+                    </main>
+                    <footer className="p-4 text-center text-slate-400 text-sm">Math Worksheet for Kids (Ages 4-7)</footer>
+                </div>
+            );
+        };
+
+        // --- APP ---
+        const App = () => {
+            const [currentModule, setCurrentModule] = useState('numbers');
+            return (
+                <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
+                    {currentModule === 'numbers' && <NumbersModule />}
+                    {currentModule === 'addition' && <AdditionModule />}
+                    {currentModule === 'subtraction' && <SubtractionModule />}
+                </Layout>
+            );
+        };
+
+        // --- RENDER ---
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
